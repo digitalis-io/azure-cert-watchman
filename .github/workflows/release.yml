@@ -1,0 +1,163 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Linux Binary
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: Get dependencies
+      run: go mod download
+
+    - name: Run tests
+      run: go test -v ./...
+
+    - name: Build Linux AMD64 binary
+      run: |
+        VERSION=${GITHUB_REF_NAME}
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION=${{ github.event.inputs.version }}
+        fi
+        echo "Building version: $VERSION"
+        GOOS=linux GOARCH=amd64 go build \
+          -ldflags="-s -w -X main.Version=$VERSION" \
+          -o azure-cert-watchman-linux-amd64 \
+          main.go
+
+    - name: Build Linux ARM64 binary
+      run: |
+        VERSION=${GITHUB_REF_NAME}
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION=${{ github.event.inputs.version }}
+        fi
+        GOOS=linux GOARCH=arm64 go build \
+          -ldflags="-s -w -X main.Version=$VERSION" \
+          -o azure-cert-watchman-linux-arm64 \
+          main.go
+
+    - name: Create checksums
+      run: |
+        sha256sum azure-cert-watchman-linux-* > checksums.txt
+        cat checksums.txt
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: binaries
+        path: |
+          azure-cert-watchman-linux-*
+          checksums.txt
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: binaries
+
+    - name: Set version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          echo "Creating release for version: ${{ github.event.inputs.version }}"
+        else
+          echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+          echo "Creating release for tag: ${GITHUB_REF_NAME}"
+        fi
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.version.outputs.VERSION }}
+        release_name: Azure Cert Watchman ${{ steps.version.outputs.VERSION }}
+        body: |
+          ## Azure Certificates Watchman ${{ steps.version.outputs.VERSION }}
+
+          Monitor SSL certificate expiration in Azure Key Vault.
+
+          ### Installation
+
+          Download the appropriate binary for your Linux architecture:
+          - `azure-cert-watchman-linux-amd64` - For standard x86_64 systems
+          - `azure-cert-watchman-linux-arm64` - For ARM64 systems
+
+          ```bash
+          # Download the binary (example for AMD64)
+          wget https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.VERSION }}/azure-cert-watchman-linux-amd64
+
+          # Make it executable
+          chmod +x azure-cert-watchman-linux-amd64
+
+          # Move to PATH (optional)
+          sudo mv azure-cert-watchman-linux-amd64 /usr/local/bin/azure-cert-watchman
+          ```
+
+          ### Checksums
+          Verify the integrity of downloaded files using the checksums.txt file.
+
+        draft: false
+        prerelease: false
+
+    - name: Upload Linux AMD64 Binary
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./azure-cert-watchman-linux-amd64
+        asset_name: azure-cert-watchman-linux-amd64
+        asset_content_type: application/octet-stream
+
+    - name: Upload Linux ARM64 Binary
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./azure-cert-watchman-linux-arm64
+        asset_name: azure-cert-watchman-linux-arm64
+        asset_content_type: application/octet-stream
+
+    - name: Upload Checksums
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./checksums.txt
+        asset_name: checksums.txt
+        asset_content_type: text/plain
