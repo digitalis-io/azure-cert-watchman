@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Linux Binary
+    name: Build Binary
     runs-on: ubuntu-latest
 
     steps:
@@ -89,7 +89,7 @@ jobs:
       with:
         name: binaries
         path: |
-          azure-cert-watchman-linux-*
+          azure-cert-watchman-*
           checksums.txt
 
   release:
