@@ -57,9 +57,31 @@ jobs:
           -o azure-cert-watchman-linux-arm64 \
           main.go
 
+    - name: Build Windows AMD64 binary
+      run: |
+        VERSION=${GITHUB_REF_NAME}
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION=${{ github.event.inputs.version }}
+        fi
+        GOOS=windows GOARCH=amd64 go build \
+          -ldflags="-s -w -X main.Version=$VERSION" \
+          -o azure-cert-watchman-windows-amd64.exe \
+          main.go
+
+    - name: Build Windows ARM64 binary
+      run: |
+        VERSION=${GITHUB_REF_NAME}
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION=${{ github.event.inputs.version }}
+        fi
+        GOOS=windows GOARCH=arm64 go build \
+          -ldflags="-s -w -X main.Version=$VERSION" \
+          -o azure-cert-watchman-windows-arm64.exe \
+          main.go
+
     - name: Create checksums
       run: |
-        sha256sum azure-cert-watchman-linux-* > checksums.txt
+        sha256sum azure-cert-watchman-* > checksums.txt
         cat checksums.txt
 
     - name: Upload artifacts
@@ -111,12 +133,18 @@ jobs:
 
           ### Installation
 
-          Download the appropriate binary for your Linux architecture:
+          Download the appropriate binary for your system:
+
+          **Linux:**
           - `azure-cert-watchman-linux-amd64` - For standard x86_64 systems
           - `azure-cert-watchman-linux-arm64` - For ARM64 systems
 
+          **Windows:**
+          - `azure-cert-watchman-windows-amd64.exe` - For standard x86_64 systems
+          - `azure-cert-watchman-windows-arm64.exe` - For ARM64 systems
+
           ```bash
-          # Download the binary (example for AMD64)
+          # Linux - Download the binary (example for AMD64)
           wget https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.VERSION }}/azure-cert-watchman-linux-amd64
 
           # Make it executable
@@ -124,6 +152,11 @@ jobs:
 
           # Move to PATH (optional)
           sudo mv azure-cert-watchman-linux-amd64 /usr/local/bin/azure-cert-watchman
+          ```
+
+          ```powershell
+          # Windows - Download the binary (example for AMD64)
+          Invoke-WebRequest -Uri "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.VERSION }}/azure-cert-watchman-windows-amd64.exe" -OutFile "azure-cert-watchman.exe"
           ```
 
           ### Checksums
@@ -150,6 +183,26 @@ jobs:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ./azure-cert-watchman-linux-arm64
         asset_name: azure-cert-watchman-linux-arm64
+        asset_content_type: application/octet-stream
+
+    - name: Upload Windows AMD64 Binary
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./azure-cert-watchman-windows-amd64.exe
+        asset_name: azure-cert-watchman-windows-amd64.exe
+        asset_content_type: application/octet-stream
+
+    - name: Upload Windows ARM64 Binary
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./azure-cert-watchman-windows-arm64.exe
+        asset_name: azure-cert-watchman-windows-arm64.exe
         asset_content_type: application/octet-stream
 
     - name: Upload Checksums
