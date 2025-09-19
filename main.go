@@ -165,7 +165,7 @@ func checkCertificateExpiry(certName string, attrs *azcertificates.CertificateAt
 		return true
 	case daysUntilExpiry < WarningDays:
 		color.Yellow("⚠ WARNING: Certificate %s expires in %d days (%s)", certName, daysUntilExpiry, expiryTime.Format("2006-01-02"))
-		return true
+		return false
 	default:
 		fmt.Printf("✓ Certificate %s expires in %d days (%s)\n", certName, daysUntilExpiry, expiryTime.Format("2006-01-02"))
 		return false
